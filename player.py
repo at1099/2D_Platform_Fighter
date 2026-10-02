@@ -38,7 +38,7 @@ class Arrow():
         elif self.vel_x < 0:
             win.blit(self.flippedImage, (self.x, self.y))
 
-    def Move(self, arrowList):
+    def Move(self):
         #Adds the velocity in each direction to the position so that the player moves
         self.x += self.vel_x
         self.y += self.vel_y
@@ -60,6 +60,8 @@ class Player():
         #vel_x (horizontal) and vel_y (vertical) track the current velocity (speed and direction) in each of their planes
         self.vel_x = 0
         self.vel_y = 0
+        self.knockback_x = 0
+        self.knockback_y = 0    
         #mass stores the mass of the player for use in applying gravity
         self.mass = 1
         #numJumps stores the current amount of times the player can jump
@@ -95,7 +97,6 @@ class Player():
         self.heavyAttackLastUpdate = pygame.time.get_ticks()
 
         #Boolean variables which keep a track of if the player is currently performing certain actions
-        self.isAnimating = False
         self.isLightAttacking = False
         self.isHeavyAttacking = False
         self.isHoldingHeavyKey = False
@@ -126,6 +127,8 @@ class Player():
         self.currentAnim = self.idleFrames
         #Stores the current animation as an integer so that is can be transmitted over a server
         self.currentAnimIndex = 0
+
+        self.currentArrow = None
 
         #A dictionary which links currentAnimIndex and currentAnim for online play
         self.onlineAnims = {
@@ -165,7 +168,7 @@ class Player():
         #Stores whether the while loop should continue running or end
         run = True
 
-        while run == True:
+        while run:
             #keeps a track of the current position of the player's mouse on the screen
             MousePos = pygame.mouse.get_pos()
 
@@ -220,7 +223,7 @@ class Player():
             pygame.draw.rect(win, self.colour, self.collisionbox)
         pygame.draw.rect(win, (255,0,255), self.footCollisionbox)
         pygame.draw.rect(win, (255,0,255), self.headCollisionbox)
-        if isinstance (self, Archer) == True:
+        if isinstance (self, Archer):
             if self.isFiringArrow or self.isLightAttacking:
                 pygame.draw.rect(win, (255, 0, 0), self.attackCollisionBox)
         elif self.isLightAttacking or self.isHeavyAttacking:
@@ -312,7 +315,6 @@ class Player():
 
     
     def Run(self):
-        self.isAnimating = True
         currentTime = pygame.time.get_ticks()
         #If the current direction is right, the animation will be running to the right
         if self.currentDir == 1:
@@ -338,7 +340,6 @@ class Player():
                     self.currentFrame = 0
 
     def Jump(self):
-        self.isAnimating = True
         currentTime = pygame.time.get_ticks()
         #If the current direction is right, the animation will be jumping to the right
         if self.currentDir == 1:
@@ -364,7 +365,6 @@ class Player():
                     self.currentFrame = 0
 
     def Idle(self):
-        self.isAnimating = True
         currentTime = pygame.time.get_ticks()
         #If the current direction is right, the animation will be idle, facing to the right
         if self.currentDir == 1:
@@ -389,7 +389,7 @@ class Player():
                 if self.currentFrame >= len(self.idleFrames):
                     self.currentFrame = 0
 
-    def Move(self, otherPlayer, arrowList):
+    def Move(self, otherPlayer):
         #arrow defined at the start so that it can be used in comparative statements
         arrow = None
         #Shortcut because this function is used repeatedly
@@ -398,7 +398,7 @@ class Player():
         if self.isAttacked and not otherPlayer.isHeavyAttacking and not otherPlayer.isLightAttacking:
             self.isAttacked = False
         #Checks if player is pressing left keybind and moves them
-        if keys[self.Keybinds["left"]] and self.isAttacked == False and self.isDashing == False and self.vel_x > -c.maxSpeed:
+        if keys[self.Keybinds["left"]] and not self.isAttacked and not self.isDashing and self.vel_x > -c.maxSpeed:
             if not self.isHeavyAttacking:
                 self.vel_x += -c.acceleration
             #Max speed (ignoring direction) is lower when player is heavy attacking to make the attacks fair and carry some risk to perform
@@ -406,7 +406,7 @@ class Player():
                 self.vel_x += -c.acceleration
 
         #Checks if player is pressing right keybind and moves them
-        if keys[self.Keybinds["right"]] and self.isAttacked == False and self.isDashing == False and self.vel_x < c.maxSpeed:
+        if keys[self.Keybinds["right"]] and not self.isAttacked and not self.isDashing and self.vel_x < c.maxSpeed:
             if not self.isHeavyAttacking:
                 self.vel_x += c.acceleration
             #Max speed (ignoring direction) is lower when player is heavy attacking to make the attacks fair and carry some risk to perform
@@ -414,25 +414,25 @@ class Player():
                 self.vel_x += c.acceleration
 
         #If player is pressing down key, program runs GoDown()
-        if keys[self.Keybinds["down"]] and self.isGrounded == True:
+        if keys[self.Keybinds["down"]] and self.isGrounded:
             self.GoDown()
 
         #Animations are ordered by priority based on which animation should be showing if several actions are occuring at the same time
         #If player is performing a heavy attack, program runs HeavyAttack()
-        if self.isHeavyAttacking == True:
-            arrow = self.HeavyAttack(otherPlayer, arrowList)
+        if self.isHeavyAttacking:
+            arrow = self.HeavyAttack(otherPlayer)
         #If player is performing a light attack, program runs LightAttack()
-        elif self.isLightAttacking == True:
+        elif self.isLightAttacking:
             arrow = self.LightAttack(otherPlayer)
         #If player is jumping, program runs Jump()
-        elif self.isJumping == True:
+        elif self.isJumping:
             self.Jump()
         #If player's speed (ignoring direction) is greater than 0, program runs Run()
-        elif self.vel_x > 0 or self.vel_x < 0:
+        elif abs(self.vel_x) > 0.1:
             self.Run()
         #If player is not moving, program runs Idle()
-        elif self.vel_x == 0 or self.currentAnim == 0:
-            self.currentAnim = self.idleFrames
+        else:
+            self.vel_x = 0
             self.Idle()
 
         #If speed (ignoring direction) is greater than 0.25 (so that the player becomes stationary and does not keep moving side to side), then friction should be applied opposite to motion and currentDir should be set to direction of velocity
@@ -446,51 +446,80 @@ class Player():
             self.vel_x = 0
     
         #Checks if the player is being attacked
-        self.CheckAttacked(otherPlayer, arrowList)
-        #Updates the player's position based on current velocity
-        self.x += self.vel_x
-        self.y += self.vel_y
+        self.CheckAttacked(otherPlayer)
 
+        #Updates the player's position based on current velocity
+        self.x += self.vel_x + self.knockback_x
+        self.y += self.vel_y + self.knockback_y
+
+        # Slowly reduce horizontal knockback
+        if self.knockback_x > 0:
+            self.knockback_x = max(0, self.knockback_x - 0.5)
+        elif self.knockback_x < 0:
+            self.knockback_x = min(0, self.knockback_x + 0.5)
+
+        # Slowly reduce vertical knockback
+        if self.knockback_y > 0:
+            self.knockback_y = max(0, self.knockback_y - 0.5)
+        elif self.knockback_y < 0:
+            self.knockback_y = min(0, self.knockback_y + 0.5)
         #Program runs Update()
-        self.Update(arrowList)
+        self.Update()
 
         return arrow
     
     def MakeObject(self, player, otherPlayer):
+        if self.currentArrow is not None:
+            arrowActive = True
+            arrowX = self.currentArrow.x
+            arrowY = self.currentArrow.y
+            arrowVelX = self.currentArrow.vel_x
+            arrowVelY = self.currentArrow.vel_y
+            arrowHasHit = self.currentArrow.hasHit
+        else:
+            arrowActive = False
+            arrowX = 0
+            arrowY = 0
+            arrowVelX = 0
+            arrowVelY = 0
+            arrowHasHit = False
+
         #Used for sending data to the server in this format
-        return OnlineObject(self.x, self.y, otherPlayer.score, self.currentAnimIndex, self.currentDir, self.isLightAttacking, self.isHeavyAttacking, self.isGrounded, self.isJumping, self.isAttacked, self.isDashing, self.isPassingThrough, self.currentFrame, player)
+        return OnlineObject(self.x, self.y, otherPlayer.score, self.currentAnimIndex, self.currentDir, self.isLightAttacking, self.isHeavyAttacking, self.isGrounded, self.isJumping, self.isAttacked, self.isDashing, self.isPassingThrough, self.currentFrame, player, arrowActive, arrowX, arrowY, arrowVelX, arrowVelY, arrowHasHit)
     
     def KnockbackCalculator(self):
-        #Uses the knockback formula if the damage taken is positive
         if self.damageTaken > 0:
-            knockback = (2+(self.damageTaken)**1/4)
+            knockback = 5 + self.damageTaken * 0.08
         else:
             knockback = 0
+
         return knockback
 
-    def CheckAttacked(self, attacker, arrowList):
+    def CheckAttacked(self, attacker):
         #Checks if player is colliding with the enemy's attackCollisionbox and checks the player is not already attacked - because the player could then be hit multiple times by one attack - or the player is not dashing - because this should result in a dodge of attack
-        if self.collisionbox.colliderect(attacker.attackCollisionBox) and self.isAttacked == False and attacker.isLightAttacking == True and self.isDashing == False:
+        if self.collisionbox.colliderect(attacker.attackCollisionBox) and not self.isAttacked and attacker.isLightAttacking and not self.isDashing:
             self.damageTaken += 15
-            self.vel_x = self.KnockbackCalculator()*attacker.currentDir
+            self.knockback_x = self.KnockbackCalculator()*attacker.currentDir
+            self.knockback_y = -3
             self.isAttacked = True
             attacker.isLightAttacking = False
         #Checks if the player is an Archer because the Archer's heavy attack works by firing an arrow instead of a standard attack
-        if isinstance (attacker, Archer) == True:
+        if isinstance (attacker, Archer):
             #Checks if player is colliding with the enemy's attackCollisionbox and checks the player is not already attacked - because the player could then be hit multiple times by one attack - or the player is not dashing - because this should result in a dodge of attack
-            if self.collisionbox.colliderect(attacker.attackCollisionBox) and self.isDashing == False and attacker.isFiringArrow == True:
+            if self.collisionbox.colliderect(attacker.attackCollisionBox) and not self.isDashing and attacker.isFiringArrow:
                 self.damageTaken += 30
-                self.vel_x = self.KnockbackCalculator()*attacker.currentDir
-                self.isAttacked = True 
+                self.knockback_x = self.KnockbackCalculator()*attacker.currentDir
+                self.knockback_y = -5
+                self.isAttacked = True
                 attacker.isFiringArrow = False
-                #Iterates through arrows in arrowList to check if they are colliding, if so their hasHit attribute is set to True so they will be removed from the scene
-                for arrow in arrowList:
-                    arrow.hasHit = True
+                #Checks if arrow is colliding, if so their hasHit attribute is set to True so they will be removed from the scene
+                attacker.currentArrow.hasHit = True
                 attacker.isHeavyAttacking = False
         #Checks if player is colliding with the enemy's attackCollisionbox and checks the player is not already attacked - because the player could then be hit multiple times by one attack - or the player is not dashing - because this should result in a dodge of attack
-        if self.collisionbox.colliderect(attacker.attackCollisionBox) and self.isAttacked == False and attacker.isHeavyAttacking == True and self.isDashing == False:
+        if self.collisionbox.colliderect(attacker.attackCollisionBox) and not self.isAttacked and attacker.isHeavyAttacking and not self.isDashing:
             self.damageTaken += 20
-            self.vel_x = self.KnockbackCalculator()*attacker.currentDir
+            self.knockback_x = self.KnockbackCalculator()*attacker.currentDir
+            self.knockback_y = -4
             self.isAttacked = True
             attacker.isHeavyAttacking = False
 
@@ -536,7 +565,6 @@ class Knight(Player):
 
     def LightAttack(self, otherPlayer):
         #If the player is attacking is checked in the Play() gameloop because it uses the pygame event manager
-        self.isAnimating = True
         currentTime = pygame.time.get_ticks()
         self.isLightAttacking = True
         #If the player is facing right, plays the right animation
@@ -566,9 +594,8 @@ class Knight(Player):
                     self.currentFrame = 0
                     otherPlayer.isAttacked = False
 
-    def HeavyAttack(self, otherPlayer, arrowList):
+    def HeavyAttack(self, otherPlayer):
         #If the player is attacking is checked in the Play() gameloop because it uses the pygame event manager
-        self.isAnimating = True
         currentTime = pygame.time.get_ticks()
         self.isHeavyAttacking = True
         #If the player is facing right, plays the right animation
@@ -608,7 +635,7 @@ class Knight(Player):
             self.canHeavyAttack = True
             self.heavyAttackLastUpdate = currentTime
     
-    def Update(self, arrowList):
+    def Update(self):
         #Updates all of the hitboxes for the Knight player, so that they are in the correct place for collision detection
         self.collisionbox = pygame.Rect(self.x, self.y, self.width, self.height)
         self.footCollisionbox = pygame.Rect(self.x, self.y+(self.height-2.5), self.width, 5)
@@ -661,7 +688,6 @@ class Archer(Player):
 
     def LightAttack(self, otherPlayer):
         #If the player is attacking is checked in the Play() gameloop because it uses the pygame event manager
-        self.isAnimating = True
         currentTime = pygame.time.get_ticks()
         self.isLightAttacking = True
         #If the player is facing right, plays the right animation
@@ -679,7 +705,7 @@ class Archer(Player):
                     otherPlayer.isAttacked = False
         #If the player is facing left, plays the left animation
         elif self.currentDir == -1:
-            self.currentAnim = self.lightAttackFrames
+            self.currentAnim = self.flippedLightAttackFrames
             self.currentAnimIndex = 6
             #Subtracts time of last frame switch from current time and compares to animation cooldown, and if it is bigger then the next frame is set as the current frame
             if currentTime - self.animLastUpdate >= c.animCooldown:
@@ -691,9 +717,8 @@ class Archer(Player):
                     self.currentFrame = 0
                     otherPlayer.isAttacked = False
 
-    def HeavyAttack(self, otherPlayer, arrowList):
+    def HeavyAttack(self, otherPlayer):
         #If the player is attacking is checked in the Play() gameloop because it uses the pygame event manager
-        self.isAnimating = True
         currentTime = pygame.time.get_ticks()
         arrow = None
         self.isHeavyAttacking = True
@@ -706,11 +731,11 @@ class Archer(Player):
                 self.currentFrame += 1
                 self.animLastUpdate = currentTime
                 #Creates an arrow that shoots out the bow on the frame when the animation releases the bow string
-                if self.canCreateArrow == True and self.currentFrame == 9:
+                if self.canCreateArrow and self.currentFrame == 9:
                     arrow = Arrow(self.x, self.y, 20, -2.5, 1, self)
                     self.canCreateArrow = False
                     self.isFiringArrow = True
-                    arrowList.append(arrow)
+                    self.currentArrow = arrow
                 #If the final frame in the animation is reached, the frame number should be reset to 0 and player is no longer attacking
                 if self.currentFrame >= len(self.heavyAttackFrames):
                     self.isHeavyAttacking = False
@@ -726,11 +751,11 @@ class Archer(Player):
                 self.currentFrame += 1
                 self.animLastUpdate = currentTime
                 #Creates an arrow that shoots out the bow on the frame when the animation releases the bow string
-                if self.canCreateArrow == True and self.currentFrame == 9:
+                if self.canCreateArrow and self.currentFrame == 9:
                     arrow = Arrow(self.x, self.y, -20, -2.5, -1, self)
                     self.canCreateArrow = False
                     self.isFiringArrow = True
-                    arrowList.append(arrow)
+                    self.currentArrow = arrow
                 #If the final frame in the animation is reached, the frame number should be reset to 0 and player is no longer attacking
                 if self.currentFrame >= len(self.heavyAttackFrames):
                     self.isHeavyAttacking = False
@@ -749,22 +774,23 @@ class Archer(Player):
             self.heavyAttackLastUpdate = currentTime
             self.canCreateArrow = True
     
-    def Update(self, arrowList):
+    def Update(self):
         #Updates all of the hitboxes for the Archer player, so that they are in the correct place for collision detection
         self.collisionbox = pygame.Rect(self.x, self.y, self.width, self.height)
         self.footCollisionbox = pygame.Rect(self.x, self.y+(self.height-2.5), self.width, 5)
         self.headCollisionbox = pygame.Rect(self.x, self.y-5, self.width, 5)
+
         #Changes attack hitbox depending on which attack the Archer is doing, if it is light it is just like the Knight but if it is heavy it should follow the arrow
-        if self.isFiringArrow:
-            self.attackCollisionBox = pygame.Rect(arrowList[0].x, arrowList[0].y+24, 64, 16)
-        elif self.isLightAttacking == True:
+        if self.isFiringArrow and self.currentArrow is not None:
+            self.attackCollisionBox = pygame.Rect(self.currentArrow.x, self.currentArrow.y+24, 64, 16)
+        elif self.isLightAttacking:
             self.attackCollisionBox = pygame.Rect((self.x+self.width/4)+3*self.width/4*self.currentDir, self.y, self.width/2, self.height)
         else:
             self.attackCollisionBox = pygame.Rect(c.width*2,c.height*2, 1, 1)
 
 #OnlineObject creates objects that act as a container for information to be transferred to the server
 class OnlineObject():
-    def __init__(self, x, y, score, currentAnim, currentDir, isLightAttacking, isHeavyAttacking, isGrounded, isJumping, isAttacked, isDashing, isPassingThrough, currentFrame, player):
+    def __init__(self, x, y, score, currentAnim, currentDir, isLightAttacking, isHeavyAttacking, isGrounded, isJumping, isAttacked, isDashing, isPassingThrough, currentFrame, player, arrow_active, arrow_x, arrow_y, arrow_vel_x, arrow_vel_y, arrow_hit):
         #All the attributes are attributes from the player which are essential to transmit so that the player on the other client does the same actions as on this client
         self.x = x
         self.y = y
@@ -781,13 +807,20 @@ class OnlineObject():
         self.currentFrame = currentFrame
         self.player = player
 
-    def UpdateObject(self, object, arrowList, otherPlayer):
+        self.arrow_x = arrow_x
+        self.arrow_y = arrow_y
+        self.arrow_vel_x = arrow_vel_x
+        self.arrow_vel_y = arrow_vel_y
+        self.arrow_active = arrow_active
+        self.arrow_hit = arrow_hit
+
+    def UpdateObject(self, object, otherPlayer):
         #UpdateObject changes all the attributes of the player on this client to the values transmitted from the other client
-        arrow = None
         object.x = self.x
         object.y = self.y
         otherPlayer.score = self.score
         object.currentDir = self.currentDir
+
         object.isLightAttacking = self.isLightAttacking
         object.isHeavyAttacking = self.isHeavyAttacking
         object.isGrounded = self.isGrounded
@@ -795,13 +828,8 @@ class OnlineObject():
         object.isAttacked = self.isAttacked
         object.isDashing = self.isDashing
         object.isPassingThrough = self.isPassingThrough
+
         object.currentFrame = self.currentFrame
         object.currentAnim = object.onlineAnims[self.currentAnim]
-        object.Update(arrowList)
 
-        if object.isLightAttacking == True:
-            arrow = object.LightAttack(otherPlayer)
-
-        if object.isHeavyAttacking == True:
-            arrow = object.HeavyAttack(otherPlayer, arrowList)
-        return arrow
+        object.Update()

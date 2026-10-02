@@ -55,15 +55,16 @@ def LoadLevel(LevelNumber):
     return objList, playerSPList
 
 #Used to draw everything onto the screen each frame
-def RedrawWindow(playerList, platList, arrowList):
+def RedrawWindow(playerList, platList):
     #Background needs to be redrawn so that the old images are no longer on the screen, the bakcground covers them up
     win.fill("Light Blue")
     #Draws all the platforms on the screen
     for i in range(len(platList)):
         platList[i].Draw(win)
     #Draws any existing arrows onto the screen
-    for arrow in arrowList:
-        arrow.Draw(win)
+    for player in playerList:
+        if player.currentArrow is not None:
+            player.currentArrow.Draw(win)
 
     #Draws the current frame for each player on the screen
     for i in range(len(playerList)):
@@ -109,7 +110,7 @@ def SettingsMenu(playerList):
     p2Button = Button(pygame.image.load("Menu/Play Rect.png"), (1100, 400), "Player 2 Keybinds", GetFont(50), "Green", "White")
     quitButton = Button(pygame.image.load("Menu/Play Rect.png"), (700, 700), "Quit", GetFont(50), "Green", "White")
 
-    while run == True:
+    while run:
         #Keeps a track of the position of the mouse pointer on the screen
         MousePos = pygame.mouse.get_pos()
 
@@ -154,8 +155,6 @@ def GetKeybinds(numLines, player):
 def Play(levelNum):
     #Define variables which are used in the gameloop
     clock = pygame.time.Clock()
-    arrowList = []
-    arrow = None
     run = True
     playerList = []
     platList = []
@@ -191,8 +190,23 @@ def Play(levelNum):
         clock.tick(60)
 
         #Runs Move() function for each player
-        arrow = playerList[0].Move(playerList[1], arrowList)
-        arrow = playerList[1].Move(playerList[0], arrowList)
+        arrow = playerList[0].Move(playerList[1])
+        arrow = playerList[1].Move(playerList[0])
+
+        for player in playerList:
+            if player.currentArrow is not None:
+                player.currentArrow.Gravity()
+                player.currentArrow.Move()
+
+                # Remove arrow if it leaves the screen or hits a player
+                if (player.currentArrow.x >= c.width + player.currentArrow.width or
+                    player.currentArrow.x < -player.currentArrow.width or
+                    player.currentArrow.y > c.height or
+                    player.currentArrow.y < 0 or
+                    player.currentArrow.hasHit):
+
+                    player.isFiringArrow = False
+                    player.currentArrow = None
 
         #Checks if player is dead
         for i in range(2):
@@ -203,15 +217,24 @@ def Play(levelNum):
             elif i == 1:
                 deadPlayer = 1
                 alivePlayer = 0
+
             #If so it resets the dead player to their spawn point and adds score to the other player
             if isDead:
                 playerList[alivePlayer].score += 1
                 playerList[deadPlayer].x = playerSPList[deadPlayer][0]
                 playerList[deadPlayer].y = playerSPList[deadPlayer][1]
+
                 playerList[deadPlayer].vel_x = 0
                 playerList[deadPlayer].vel_y = 0
+                playerList[deadPlayer].knockback_x = 0
+                playerList[deadPlayer].knockback_y = 0
+
                 isDead = False
                 playerList[deadPlayer].damageTaken = 0
+
+                playerList[deadPlayer].isAttacked = False
+                playerList[deadPlayer].isDashing = False
+                playerList[deadPlayer].isJumping = False
 
             #Runs Gravity(), cooldown and collision checks on each player
             playerList[i].Gravity()
@@ -243,37 +266,37 @@ def Play(levelNum):
             #Dash check for each player
             if event.type == pygame.KEYDOWN and event.key == playerList[0].Keybinds["dash"]:
                 playerList[0].DashCooldownCheck()
-                if playerList[0].canDash == True:
+                if playerList[0].canDash:
                     playerList[0].vel_x = 18*playerList[0].currentDir
                     playerList[0].isDashing = True
                     playerList[0].canDash = False
             if event.type == pygame.KEYDOWN and event.key == playerList[1].Keybinds["dash"]:
                 playerList[1].DashCooldownCheck()
-                if playerList[1].canDash == True:
+                if playerList[1].canDash:
                     playerList[1].vel_x = 18*playerList[1].currentDir
                     playerList[1].isDashing = True
                     playerList[1].canDash = False
             #Light attack check for each player
-            if event.type == pygame.KEYDOWN and event.key == playerList[0].Keybinds["attackLight"] and playerList[0].isLightAttacking == False and playerList[0].isHeavyAttacking == False and playerList[0].canLightAttack == True:
+            if event.type == pygame.KEYDOWN and event.key == playerList[0].Keybinds["attackLight"] and not playerList[0].isLightAttacking and not playerList[0].isHeavyAttacking and playerList[0].canLightAttack:
                 playerList[0].isLightAttacking = True
                 playerList[0].canLightAttack = False
                 if not playerList[0].isJumping:
                     playerList[0].currentFrame = 0
                 playerList[1].isAttacked = False
-            if event.type == pygame.KEYDOWN and event.key == playerList[1].Keybinds["attackLight"] and playerList[1].isLightAttacking == False and playerList[1].isHeavyAttacking == False and playerList[1].canLightAttack == True:
+            if event.type == pygame.KEYDOWN and event.key == playerList[1].Keybinds["attackLight"] and not playerList[1].isLightAttacking and not playerList[1].isHeavyAttacking and playerList[1].canLightAttack:
                 playerList[1].isLightAttacking = True
                 playerList[1].canLightAttack = False
                 if not playerList[1].isJumping:
                     playerList[1].currentFrame = 0
                 playerList[0].isAttacked = False
             #Heavy attack check for each player
-            if event.type == pygame.KEYDOWN and event.key == playerList[0].Keybinds["attackHeavy"] and playerList[0].isLightAttacking == False and playerList[0].isHeavyAttacking == False and playerList[0].canHeavyAttack == True:
+            if event.type == pygame.KEYDOWN and event.key == playerList[0].Keybinds["attackHeavy"] and not playerList[0].isLightAttacking and not playerList[0].isHeavyAttacking and playerList[0].canHeavyAttack:
                 playerList[0].isHeavyAttacking = True
                 playerList[0].canHeavyAttack = False
                 if not playerList[0].isJumping:
                     playerList[0].currentFrame = 0
                 playerList[1].isAttacked = False
-            if event.type == pygame.KEYDOWN and event.key == playerList[1].Keybinds["attackHeavy"]  and playerList[1].isLightAttacking == False and playerList[1].isHeavyAttacking == False and playerList[1].canHeavyAttack == True:
+            if event.type == pygame.KEYDOWN and event.key == playerList[1].Keybinds["attackHeavy"]  and not playerList[1].isLightAttacking and not playerList[1].isHeavyAttacking and playerList[1].canHeavyAttack:
                 playerList[1].isHeavyAttacking = True
                 playerList[1].canHeavyAttack = False
                 if not playerList[1].isJumping:
@@ -284,28 +307,12 @@ def Play(levelNum):
                 SettingsMenu(playerList)
                 
         #Runs RedrawWindow() to redraw the screen
-        RedrawWindow(playerList, platList, arrowList)
-
-        #Iterates through each arrow in the arrowList
-        for i in range(len(arrowList)):
-            #Tries to check if the arrow is off the screen or has collided with an enemy player
-            try:
-                if (arrowList[i].x >= c.width + arrowList[i].width or arrowList[i].x < 0-(arrowList[i].width) or arrowList[i].y > c.height or arrowList[i].y < 0) or (arrowList[i].hasHit):
-                    arrowList[i].firedBy.isFiringArrow = False
-                    del arrowList[i]
-            except:
-                continue
-        #Applies gravity and movement to each arrow in arrowList
-        for arrow in arrowList:
-            arrow.Gravity()
-            arrow.Move(arrowList)
+        RedrawWindow(playerList, platList)
 
 #Main function for the online gamemode
 def PlayOnline(levelNum):
     #Define variables which are used in the gameloop
     clock = pygame.time.Clock()
-    arrowList = []
-    arrow = None
     run = True
     playerList = []
     platList = []
@@ -358,7 +365,7 @@ def PlayOnline(levelNum):
     serverPort = int(serverPort)
     n = Network(serverIP)
     #Defines the default data to be sent, this will be changed later
-    data = OnlineObject(300, 300, 0, 0, 1, False, False, False, False, False, False, False, [0,0,0,0,0,0,0,0,0,0], 0)
+    data = OnlineObject(300, 300, 0, 0, 1, False, False, False, False, False, False, False, [0,0,0,0,0,0,0,0,0,0], 0, False, 0, 0, 0, 0, False)
     #Gameloop
     while run:
         #Sets clock speed to allow the while loop to run 60 times per second (this is so that players dont move faster or slower depending on computing power)
@@ -380,15 +387,15 @@ def PlayOnline(levelNum):
 
         #Tries to update the other player in the current scene
         try:
-            arrow = data.UpdateObject(playerList[otherPlayer], arrowList, playerList[player])
+            data.UpdateObject(playerList[otherPlayer], playerList[player])
         #For the except statement to occur, there must have been an error with receiving data such as the other client leaving 
         except:
             MainMenu()
 
         #Moves the active player on this client
-        arrow = playerList[player].Move(playerList[otherPlayer], arrowList)
+        arrow = playerList[player].Move(playerList[otherPlayer])
         #Checks if the other player has been attacked
-        playerList[otherPlayer].CheckAttacked(playerList[player], arrowList)
+        playerList[otherPlayer].CheckAttacked(playerList[player])
         #Checks if the active player is dead
         isDead = playerList[player].DeathCheck()
         #If true then the other player has score added and the dead player has coordinates reset
@@ -396,10 +403,18 @@ def PlayOnline(levelNum):
             playerList[otherPlayer].score += 1
             playerList[player].x = playerSPList[player][0]
             playerList[player].y = playerSPList[player][1]
+
             playerList[player].vel_x = 0
             playerList[player].vel_y = 0
-            playerList[player].damageTaken = 0
+            playerList[player].knockback_x = 0
+            playerList[player].knockback_y = 0
+
             isDead = False
+            playerList[player].damageTaken = 0
+
+            playerList[player].isAttacked = False
+            playerList[player].isDashing = False
+            playerList[player].isJumping = False
 
         #Runs Gravity(), cooldown and collision checks on each player
         for i in range(2):
@@ -423,19 +438,19 @@ def PlayOnline(levelNum):
             #Dash check for each player
             if event.type == pygame.KEYDOWN and event.key == playerList[player].Keybinds["dash"]:
                 playerList[player].DashCooldownCheck()
-                if playerList[player].canDash == True:
-                    playerList[player].vel_x = 16*playerList[player].currentDir
+                if playerList[player].canDash:
+                    playerList[player].vel_x = 5*playerList[player].currentDir
                     playerList[player].isDashing = True
                     playerList[player].canDash = False
             #Light attack check for active player
-            if event.type == pygame.KEYDOWN and event.key == playerList[player].Keybinds["attackLight"] and playerList[player].isLightAttacking == False and playerList[player].isHeavyAttacking == False and playerList[player].canLightAttack == True:
+            if event.type == pygame.KEYDOWN and event.key == playerList[player].Keybinds["attackLight"] and not playerList[player].isLightAttacking and not playerList[player].isHeavyAttacking and playerList[player].canLightAttack:
                 playerList[player].isLightAttacking = True
                 playerList[player].canLightAttack = False
                 playerList[otherPlayer].isAttacked = False
                 if not playerList[player].isJumping:
                     playerList[player].currentFrame = 0
             #Heavy attack check for active player
-            if event.type == pygame.KEYDOWN and event.key == playerList[player].Keybinds["attackHeavy"] and playerList[player].isLightAttacking == False and playerList[player].isHeavyAttacking == False and playerList[player].canHeavyAttack == True:
+            if event.type == pygame.KEYDOWN and event.key == playerList[player].Keybinds["attackHeavy"] and not playerList[player].isLightAttacking and not playerList[player].isHeavyAttacking and playerList[player].canHeavyAttack:
                 playerList[player].isHeavyAttacking = True
                 playerList[player].canHeavyAttack = False
                 playerList[otherPlayer].isAttacked = False
@@ -446,18 +461,7 @@ def PlayOnline(levelNum):
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 SettingsMenu(playerList)
         #Runs RedrawWindow()
-        RedrawWindow(playerList, platList, arrowList)
-
-        #Iterates through each arrow in the arrowList
-        for i in range(len(arrowList)):
-            #Tries to check if the arrow is off the screen or has collided with an enemy player
-            if (arrowList[i].x >= c.width + arrowList[i].width or arrowList[i].x < 0-(arrowList[i].width) or arrowList[i].y > c.height or arrowList[i].y < 0) or (arrowList[i].hasHit):
-                arrowList[i].firedBy.isFiringArrow = False
-                del arrowList[i]
-        #Applies gravity and movement to each arrow in arrowList
-        for arrow in arrowList:
-            arrow.Gravity()
-            arrow.Move(arrowList)
+        RedrawWindow(playerList, platList)
 
         
 def LevelSelect(numList, mode):
@@ -776,14 +780,14 @@ def LevelEditor():
 
         #Whilst the user has a spawn point selected, the spawn point will follow the user's mouse pointer
         if SPcount[0] == 1:
-            if SP1Selected == True:
+            if SP1Selected:
                 SP1 = pygame.Rect(EditMousePos[0], EditMousePos[1], 20, 20)
             #It is then drawn on the screen
             pygame.draw.rect(win, (255, 0, 0), SP1)
         
         #Whilst the user has a spawn point selected, the spawn point will follow the user's mouse pointer
         if SPcount[1] == 1:
-            if SP2Selected == True:
+            if SP2Selected:
                 SP2 = pygame.Rect(EditMousePos[0], EditMousePos[1], 20, 20)
             #It is then drawn on the screen
             pygame.draw.rect(win, (0, 0, 255), SP2)

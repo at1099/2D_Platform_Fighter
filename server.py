@@ -9,7 +9,7 @@ import time
 server = "0.0.0.0"
 port = 5555
 #Sets the players and the online objects which will be sent back to the clients
-players = [OnlineObject(800, 300, 0, 0, 1, False, False, False, False, False, False, False, 0, 0), OnlineObject(300, 300, 0, 0, 1, False, False, False, False, False, False, False, 0, 1)]
+players = [OnlineObject(800, 300, 0, 0, 1, False, False, False, False, False, False, False, 0, 0, False, 0, 0, 0, 0, False), OnlineObject(300, 300, 0, 0, 1, False, False, False, False, False, False, False, 0, 1, False, 0, 0, 0, 0, False)]
 
 def threaded_client(conn, player, s):
     #Sends data at the start when the connection is established
